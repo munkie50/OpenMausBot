@@ -2,18 +2,13 @@
 // the engine's loopback relay (never on a command line), and the bot hears what was filled or why not, never a value.
 import { randomBytes } from "node:crypto";
 
-import { loginLabel, loginOriginCheck, loginPageCheck, type LoginPlace, type LoginSource } from "../shared/logins.ts";
+import { loginLabel, loginOriginCheck, loginPageCheck, type LoginPlace } from "../shared/logins.ts";
 import { scrubHeldSecrets } from "../shared/redact.ts";
 import type { SecretHold } from "./browser-secret-hold.ts";
+import type { FillCandidate } from "./login-vault-source.ts";
 import { totpCode, type TotpKey } from "./totp.ts";
 
-/** Its secrets are read only when it is about to be filled. */
-export interface FillCandidate extends LoginPlace {
-  id: string;
-  username: string;
-  source: LoginSource;
-  secrets(): Promise<{ password: string; totp: TotpKey | null }>;
-}
+export type { FillCandidate } from "./login-vault-source.ts";
 
 export interface FillLoginDeps {
   engine(args: string[]): Promise<Record<string, unknown> | null>;

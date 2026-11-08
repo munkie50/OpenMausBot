@@ -12,7 +12,6 @@ export interface LoginRouteDeps {
   botExists(id: string): boolean;
   onePassword: {
     status(): OnePasswordStatus;
-    list(): LoginSummary[];
     connect(token: string): Promise<OnePasswordStatus>;
     refresh(): Promise<OnePasswordStatus>;
     disconnect(): OnePasswordStatus;
@@ -77,7 +76,7 @@ export function createLoginRoutes(deps: LoginRouteDeps): RouteHandler {
     if (path !== "/api/logins" && !path.startsWith("/api/logins/")) return PASS;
     res.setHeader("cache-control", "no-store");
     if (path === "/api/logins" && method === "GET") {
-      return json(res, 200, { logins: [...deps.list(), ...deps.onePassword.list()], onePassword: deps.onePassword.status() });
+      return json(res, 200, { logins: deps.list(), onePassword: deps.onePassword.status() });
     }
     // JSON only, so a form posted from another local page cannot add or change one.
     if (method !== "GET" && method !== "DELETE" && !isJson(req)) return json(res, 415, { error: "content-type must be application/json" });

@@ -4,7 +4,7 @@
 // required on first use, and only when a token exists.
 import type { LoginBots, LoginPlace, LoginSummary, OnePasswordStatus, OnePasswordVault } from "../shared/logins.ts";
 import { loginMatchesHost, loginSite, loginUsableBy, normalizeLoginHost } from "../shared/logins.ts";
-import type { FillCandidate } from "./login-fill.ts";
+import type { FillCandidate, VaultSource } from "./login-vault-source.ts";
 import { parseTotpKey } from "./totp.ts";
 
 export interface OnePasswordItemFields {
@@ -115,7 +115,8 @@ export function onePasswordProblem(error: unknown): string {
   return "1Password could not be read. Try again, or connect it again with a new token.";
 }
 
-export class OnePasswordLogins {
+export class OnePasswordLogins implements VaultSource {
+  readonly idPrefix = ID_PREFIX;
   private readonly token: () => string | null;
   private readonly connect: (token: string) => Promise<OnePasswordClient>;
   private readonly grants: () => Record<string, LoginBots>;
@@ -187,7 +188,7 @@ export class OnePasswordLogins {
             if (!found?.password) continue;
             items++;
             for (const [site, hosts] of bySite(new Set(item.urls.flatMap((url) => normalizeLoginHost(url) ?? [])))) {
-              entries.push({ id: `${ID_PREFIX}${vault.id}:${item.id}:${site}`, vaultId: vault.id, itemId: item.id, site, hosts, exactHost: false,
+              entries.push({ id: `${this.idPrefix}${vault.id}:${item.id}:${site}`, vaultId: vault.id, itemId: item.id, site, hosts, exactHost: false,
                 username: found.username, hasTotp: Boolean(found.totp && parseTotpKey(found.totp)) });
             }
           }
