@@ -20,6 +20,7 @@ const CARD_LOGIN = { id: "l1", site: "example.com", hosts: ["example.com", "logi
 const SHARED_LOGIN = { id: "l2", site: "example.org", hosts: ["crm.example.org"], exactHost: false, username: "team", hasTotp: false, source: "settings", bots: "all", createdAt: 2 };
 const TENANT_LOGIN = { id: "l3", site: "okta.com", hosts: ["acme.okta.com"], exactHost: true, username: "ops", hasTotp: false, source: "settings", bots: "all", createdAt: 3 };
 const VAULT_LOGIN = { id: "1password:v1:i1:example.com", site: "example.com", hosts: ["vault.example.com"], exactHost: false, username: "vault-user", hasTotp: false, source: "1password", bots: "all", createdAt: 0 };
+const PROTON_LOGIN = { id: "protonpass:v1:i1:example.com", site: "example.com", hosts: ["example.com"], exactHost: false, username: "proton-user", source: "protonpass", bots: "all", createdAt: 0 };
 const OFF = { connected: false };
 
 beforeEach(() => {
@@ -39,8 +40,8 @@ async function render() {
   await act(async () => root.render(createElement(LoginsSettings)));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 }
-const button = (label: string) => [...host.querySelectorAll("button")].find((candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === label)!;
-async function click(label: string) { await act(async () => button(label).click()); }
+const button = (label: string, scope: ParentNode = host) => [...scope.querySelectorAll("button")].find((candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent) === label)!;
+async function click(label: string, scope: ParentNode = host) { await act(async () => button(label, scope).click()); }
 async function type(name: string, value: string) {
   const input = host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   await act(async () => {
@@ -55,8 +56,7 @@ async function submit() {
 
 describe("Settings → Logins", () => {
   it("accepts a read-only Proton Pass row with unknown TOTP availability", async () => {
-    fixture.api.mockResolvedValueOnce({ logins: [{ id: "protonpass:v1:i1:example.com", site: "example.com", hosts: ["example.com"], exactHost: false,
-      username: "proton-user", source: "protonpass", bots: "all", createdAt: 0 }], onePassword: OFF });
+    fixture.api.mockResolvedValueOnce({ logins: [PROTON_LOGIN], onePassword: OFF });
     await render();
     const row = host.querySelector("[data-login-row]")!;
     expect(row.textContent).toContain("Proton Pass");
@@ -203,6 +203,97 @@ describe("Settings → Logins", () => {
     await render();
     expect(fixture.api).not.toHaveBeenCalled();
     expect(host.textContent).toContain("Only an admin of this installation can see and change saved logins.");
+  });
+});
+
+describe("Settings → Logins with Proton Pass", () => {
+  const ON = { connected: true, vaults: [{ id: "v1", title: "Shared with OMB", items: 1, bots: "all" }], items: 1 };
+  const section = () => host.querySelector("[data-protonpass]")!;
+
+  it("connects with a masked token it forgets, reloads read-only rows, and disconnects independently of 1Password", async () => {
+    const connecting = Promise.withResolvers<{ protonPass: typeof ON }>();
+    const disconnecting = Promise.withResolvers<{ protonPass: typeof OFF }>();
+    fixture.api
+      .mockResolvedValueOnce({ logins: [], onePassword: ON, protonPass: OFF })
+      .mockReturnValueOnce(connecting.promise)
+      .mockResolvedValueOnce({ logins: [PROTON_LOGIN], onePassword: ON, protonPass: ON })
+      .mockReturnValueOnce(disconnecting.promise)
+      .mockResolvedValueOnce({ logins: [], onePassword: ON, protonPass: OFF });
+    await render();
+    expect(section().textContent).toContain("Install pass-cli");
+    expect(section().textContent).toContain("read-only (viewer) access");
+    const field = section().querySelector<HTMLInputElement>('input[name="protonPassToken"]')!;
+    expect(field.type).toBe("password");
+    expect(field.autocomplete).toBe("off");
+    expect(field.value).toBe("");
+    expect(button("Connect Proton Pass").disabled).toBe(true);
+    await type("protonPassToken", "   ");
+    expect(button("Connect Proton Pass").disabled).toBe(true);
+    await type("protonPassToken", " pst_fake-typed-token ");
+    await click("Connect Proton Pass");
+    expect(field.disabled).toBe(true);
+    expect(button("Connect Proton Pass").disabled).toBe(true);
+    expect(fixture.api).toHaveBeenNthCalledWith(2, "/api/logins/protonpass", { method: "POST", body: JSON.stringify({ token: "pst_fake-typed-token" }) });
+    await act(async () => { connecting.resolve({ protonPass: ON }); });
+    expect(section().textContent).toContain("Connected to Shared with OMB · 1 logins with a website");
+    expect(section().querySelector("input")).toBeNull();
+    expect(host.innerHTML).not.toContain("pst_fake-typed-token");
+    const row = host.querySelector("[data-login-row]")!;
+    expect(row.textContent).toContain("Proton Pass · All bots");
+    expect(row.querySelectorAll("button")).toHaveLength(0);
+    await click("Disconnect", section());
+    expect(button("Disconnect", section()).disabled).toBe(true);
+    expect(fixture.api).toHaveBeenNthCalledWith(4, "/api/logins/protonpass", { method: "DELETE" });
+    await act(async () => { disconnecting.resolve({ protonPass: OFF }); });
+    expect(section().querySelector<HTMLInputElement>('input[name="protonPassToken"]')!.value).toBe("");
+    expect(host.querySelector("[data-login-row]")).toBeNull();
+    expect(host.querySelector("[data-onepassword]")!.textContent).toContain("Connected to Shared with OMB");
+    expect(fixture.api.mock.calls.filter(([path]) => path === "/api/logins")).toHaveLength(3);
+  });
+
+  it("shows the saved connection status and server error, and reports a failed disconnect", async () => {
+    fixture.api
+      .mockResolvedValueOnce({ logins: [], onePassword: OFF, protonPass: { ...ON, error: "Proton Pass could not be read. Check the connection and try again." } })
+      .mockRejectedValueOnce(new Error("Could not disconnect Proton Pass."));
+    await render();
+    expect(section().textContent).toContain("Connected to Shared with OMB · 1 logins with a website");
+    expect(section().querySelector("input")).toBeNull();
+    expect(section().querySelector("[role=alert]")!.textContent).toContain("Proton Pass could not be read.");
+    await click("Disconnect", section());
+    expect(section().textContent).toContain("Could not disconnect Proton Pass.");
+    expect(button("Disconnect", section()).disabled).toBe(false);
+  });
+
+  it("reports a refused connection and allows a retry", async () => {
+    fixture.api
+      .mockResolvedValueOnce({ logins: [], onePassword: OFF, protonPass: OFF })
+      .mockRejectedValueOnce(new Error("Proton Pass CLI is not installed. Install the official pass-cli on this server, then connect again."))
+      .mockResolvedValueOnce({ protonPass: ON })
+      .mockResolvedValueOnce({ logins: [PROTON_LOGIN], onePassword: OFF, protonPass: ON });
+    await render();
+    await type("protonPassToken", "pst_fake-typed-token");
+    await click("Connect Proton Pass");
+    expect(section().querySelector("[role=alert]")!.textContent).toContain("Proton Pass CLI is not installed.");
+    expect(section().textContent).not.toContain("pst_fake-typed-token");
+    expect(button("Connect Proton Pass").disabled).toBe(false);
+    await click("Connect Proton Pass");
+    expect(section().querySelector("[role=alert]")).toBeNull();
+    expect(section().textContent).toContain("Connected to Shared with OMB");
+  });
+
+  it("forgets a saved token even when reloading the login list fails", async () => {
+    fixture.api
+      .mockResolvedValueOnce({ logins: [], onePassword: OFF, protonPass: OFF })
+      .mockResolvedValueOnce({ protonPass: ON })
+      .mockRejectedValueOnce(new Error("Could not reload logins."))
+      .mockResolvedValueOnce({ protonPass: OFF })
+      .mockResolvedValueOnce({ logins: [], onePassword: OFF, protonPass: OFF });
+    await render();
+    await type("protonPassToken", "pst_fake-typed-token");
+    await click("Connect Proton Pass");
+    expect(host.textContent).toContain("Could not reload logins.");
+    await click("Disconnect", section());
+    expect(section().querySelector<HTMLInputElement>('input[name="protonPassToken"]')!.value).toBe("");
   });
 });
 
