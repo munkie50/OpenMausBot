@@ -98,7 +98,7 @@ export function LoginsSettings() {
                     <div dir="auto" className="truncate text-[12px] text-ink-secondary">{login.username || t("settings.logins.noUsername")}</div>
                     {signInHostsLine(login) && <div dir="ltr" className="truncate text-[12px] text-ink-tertiary" data-login-hosts>{signInHostsLine(login)}</div>}
                     <div className="mt-0.5 text-[12px] leading-snug text-ink-tertiary">
-                      {[t(SOURCE_KEYS[login.source]), botNames(login.bots),
+                      {[login.source === "protonpass" ? "Proton Pass" : t(SOURCE_KEYS[login.source]), botNames(login.bots),
                         login.lastUsedAt ? t("settings.logins.used", { when: relativeTime(login.lastUsedAt) }) : t("settings.logins.neverUsed")].join(" · ")}
                     </div>
                     {loginHeldBackFor(login, state.bots).length > 0 && (
@@ -107,7 +107,7 @@ export function LoginsSettings() {
                       </div>
                     )}
                   </div>
-                  {login.source !== "1password" && (
+                  {(login.source === "card" || login.source === "settings") && (
                     <div className="flex shrink-0 gap-1">
                       <button type="button" className={ROW_BUTTON} disabled={busy} onClick={() => startEdit(login)}
                         aria-label={t("settings.logins.changeFor", { site: login.site })}>{t("settings.logins.change")}</button>

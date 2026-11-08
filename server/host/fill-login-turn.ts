@@ -29,6 +29,7 @@ export interface FillLoginTurnDeps {
   logins: Pick<BotLogins, "candidates" | "sitesFor" | "markUsed">;
   /** Why 1Password's logins may be missing just now. */
   onePasswordTrouble(): string | undefined;
+  vaultTrouble?(): string | undefined;
   loginInput(session: string, spec: Spec, env: NodeJS.ProcessEnv): Pick<FillLoginDeps, "engine" | "insertText" | "press" | "click">;
   remember: FillLoginDeps["remember"];
   stepContext(bot: BotRecord, turn: Turn): StepContext;
@@ -51,7 +52,8 @@ export function createFillLoginTurn(deps: FillLoginTurnDeps) {
     }
     if (!deps.logins.sitesFor(bot.id).length) {
       const trouble = deps.onePasswordTrouble();
-      return { ok: false, text: `You have no saved logins to fill${trouble ? ` (1Password could not be read just now: ${trouble})` : ""}. ${signIn}` };
+      const vaultTrouble = deps.vaultTrouble?.();
+      return { ok: false, text: `You have no saved logins to fill${trouble ? ` (1Password could not be read just now: ${trouble})` : ""}${vaultTrouble ? ` (${vaultTrouble})` : ""}. ${signIn}` };
     }
     if (!deps.moveToBrowser(turn)) {
       return { ok: false, text: `${ONLY_IN_BROWSER}${notHere}, and this run cannot move to your browser. ${signIn} For runs like this to sign in by themselves, the person can choose Browser under where this bot works.` };
@@ -82,6 +84,7 @@ export function createFillLoginTurn(deps: FillLoginTurnDeps) {
         candidates: (host) => deps.logins.candidates(bot.id, host),
         available: async () => deps.logins.sitesFor(bot.id),
         trouble: deps.onePasswordTrouble,
+        vaultTrouble: deps.vaultTrouble,
       }, {
         ...deps.loginInput(session, spec, env),
         remember: deps.remember,

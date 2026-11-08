@@ -54,6 +54,16 @@ async function submit() {
 }
 
 describe("Settings → Logins", () => {
+  it("accepts a read-only Proton Pass row with unknown TOTP availability", async () => {
+    fixture.api.mockResolvedValueOnce({ logins: [{ id: "protonpass:v1:i1:example.com", site: "example.com", hosts: ["example.com"], exactHost: false,
+      username: "proton-user", source: "protonpass", bots: "all", createdAt: 0 }], onePassword: OFF });
+    await render();
+    const row = host.querySelector("[data-login-row]")!;
+    expect(row.textContent).toContain("Proton Pass");
+    expect(row.textContent).not.toContain("2FA");
+    expect(row.querySelectorAll("button")).toHaveLength(0);
+  });
+
   it("lists each login by site, the sign-in hosts it also fills on, username, 2FA, source, who may use it and last use", async () => {
     fixture.api.mockResolvedValueOnce({ logins: [CARD_LOGIN, SHARED_LOGIN, TENANT_LOGIN], onePassword: OFF });
     await render();

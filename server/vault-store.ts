@@ -64,6 +64,8 @@ const fileSchema = z.object({
   onePassword: z.object({ token: z.string().min(1), connectedAt: z.number() }).optional(),
   /** Vault id → the bots that may use its logins; a vault not named here is for every bot. Kept across reconnects. */
   onePasswordGrants: z.record(z.string(), botsSchema).optional(),
+  protonPass: z.object({ token: z.string().min(1), connectedAt: z.number() }).optional(),
+  protonPassGrants: z.record(z.string(), botsSchema).optional(),
 });
 
 type DiskLogin = z.infer<typeof diskLoginSchema>;
@@ -360,12 +362,34 @@ export class VaultStore {
     this.write(Object.keys(grants).length ? { ...rest, onePasswordGrants: grants } : rest);
   }
 
+  protonPassToken(): string | null {
+    return this.read().protonPass?.token ?? null;
+  }
+
+  setProtonPassToken(token: string | null): void {
+    const { protonPass: _previous, ...rest } = this.read();
+    this.write(token ? { ...rest, protonPass: { token, connectedAt: this.now() } } : rest);
+  }
+
+  protonPassGrants(): Record<string, LoginBots> {
+    return this.read().protonPassGrants ?? {};
+  }
+
+  setProtonPassGrant(vaultId: string, bots: LoginBots): void {
+    const data = this.read();
+    const { [vaultId]: _previous, ...others } = data.protonPassGrants ?? {};
+    const grants = bots === "all" ? others : { ...others, [vaultId]: bots };
+    const { protonPassGrants: _grants, ...rest } = data;
+    this.write(Object.keys(grants).length ? { ...rest, protonPassGrants: grants } : rest);
+  }
+
   secretValues(): string[] {
     const data = this.read();
     return [
       ...data.logins.flatMap((login) => [login.password, ...(login.totp ? [login.totp.secret] : [])]),
       ...(data.onePassword ? [data.onePassword.token] : []),
       ...(data.secrets ?? []).map((secret) => secret.value),
+      ...(data.protonPass ? [data.protonPass.token] : []),
     ];
   }
 }

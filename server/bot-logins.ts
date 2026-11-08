@@ -1,8 +1,9 @@
-import { browserMatesOf, loginPageCheck, loginPlace, loginSite, type LoginPlace } from "../shared/logins.ts";
+import { browserMatesOf, loginPageCheck, loginPlace, loginSite, type LoginBots, type LoginPlace } from "../shared/logins.ts";
 import type { FillCandidate, VaultSource } from "./login-vault-source.ts";
 import { receiveLoginHandoff, type ConnectionHandoffAnswer, type ConnectionHandoffWhat, type LoginHandoffResult } from "./login-handoff.ts";
 import type { VaultStore } from "./vault-store.ts";
 import type { OnePasswordLogins } from "./onepassword.ts";
+import type { ProtonPassLogins } from "./protonpass.ts";
 import type { LoginRouteDeps } from "./routes/logins.ts";
 
 /** What the bot's browser shows while the person answers a sign-in card. */
@@ -92,18 +93,33 @@ export class BotLogins {
     else this.store.markUsed(id);
   }
 
+  vaultTrouble(): string | undefined {
+    return this.sources.filter((source) => source !== this.onePassword).flatMap((source) => source.status().error ?? []).join(" ") || undefined;
+  }
+
   /** The settings, plus whether a 1Password token is held: what a credential card's "configured" check reads. */
   credentialConfig<T extends object>(config: T): T & { onePassword: { connected: boolean } } {
     return { ...config, onePassword: { connected: Boolean(this.store.onePasswordToken()) } };
   }
 
-  routes(botExists: (id: string) => boolean): LoginRouteDeps {
+  routes(botExists: (id: string) => boolean, protonPass?: ProtonPassLogins): LoginRouteDeps {
     return {
       list: () => [...this.store.list(), ...this.sources.flatMap((source) => { void source.fresh(); return source.list(); })],
       create: (input) => this.store.create(input),
       update: (id, patch) => this.store.update(id, patch),
       remove: (id) => this.store.remove(id),
       botExists,
+      ...(protonPass ? { protonPass: {
+        status: () => protonPass.status(),
+        connect: (token: string) => protonPass.connectToken(token),
+        refresh: () => protonPass.refresh(),
+        disconnect: () => protonPass.disconnect(),
+        grant: (vaultId: string, bots: LoginBots) => {
+          if (!protonPass.hasVault(vaultId)) return null;
+          this.store.setProtonPassGrant(vaultId, bots);
+          return protonPass.status();
+        },
+      } } : {}),
       onePassword: {
         status: () => this.onePassword.status(),
         connect: async (token) => {

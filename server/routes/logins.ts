@@ -1,6 +1,7 @@
 // No answer ever carries a password, a 2FA key or the token: a saved secret is only ever replaced.
-import { LOGIN_FIELD_MAX, loginPlace, normalizeLoginHost, type LoginBots, type LoginSummary, type OnePasswordStatus } from "../../shared/logins.ts";
+import { LOGIN_FIELD_MAX, loginPlace, normalizeLoginHost, type LoginBots, type LoginSummary, type OnePasswordStatus, type ProtonPassStatus } from "../../shared/logins.ts";
 import type { LoginPatch, NewLogin } from "../vault-store.ts";
+import { protonPassProblem } from "../protonpass.ts";
 import { parseTotpKey, type TotpKey } from "../totp.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -18,10 +19,19 @@ export interface LoginRouteDeps {
     /** Null for a vault the token does not read. */
     grant(vaultId: string, bots: LoginBots): OnePasswordStatus | null;
   };
+  protonPass?: {
+    status(): ProtonPassStatus;
+    connect(token: string): Promise<ProtonPassStatus>;
+    refresh(): Promise<ProtonPassStatus>;
+    disconnect(): Promise<ProtonPassStatus>;
+    grant(vaultId: string, bots: LoginBots): ProtonPassStatus | null;
+  };
 }
 
 const ONE_PASSWORD = "/api/logins/1password";
 const VAULT = /^\/api\/logins\/1password\/vaults\/([\w-]{1,128})$/u;
+const PROTON_PASS = "/api/logins/protonpass";
+const PROTON_VAULT = /^\/api\/logins\/protonpass\/vaults\/([\w=-]{1,256})$/u;
 
 const ID = /^[\w-]{1,128}$/u;
 
@@ -76,10 +86,35 @@ export function createLoginRoutes(deps: LoginRouteDeps): RouteHandler {
     if (path !== "/api/logins" && !path.startsWith("/api/logins/")) return PASS;
     res.setHeader("cache-control", "no-store");
     if (path === "/api/logins" && method === "GET") {
-      return json(res, 200, { logins: deps.list(), onePassword: deps.onePassword.status() });
+      return json(res, 200, { logins: deps.list(), onePassword: deps.onePassword.status(), ...(deps.protonPass ? { protonPass: deps.protonPass.status() } : {}) });
     }
     // JSON only, so a form posted from another local page cannot add or change one.
     if (method !== "GET" && method !== "DELETE" && !isJson(req)) return json(res, 415, { error: "content-type must be application/json" });
+    if (path === PROTON_PASS || path.startsWith(`${PROTON_PASS}/`)) {
+      const source = deps.protonPass;
+      if (!source) return json(res, 404, { error: "Proton Pass is not available on this server." });
+      if (path === PROTON_PASS && method === "GET") return json(res, 200, { protonPass: source.status() });
+      if (path === PROTON_PASS && method === "POST") {
+        const body = await readBody(req, 16_384);
+        const token = body && typeof body === "object" && typeof body.token === "string" ? body.token.trim() : "";
+        if (!token.startsWith("pst_") || token.length > 8192 || /\s/u.test(token)) {
+          return json(res, 400, { error: "Paste a whole Proton Pass personal access token. It starts with pst_." });
+        }
+        try { return json(res, 200, { protonPass: await source.connect(token) }); }
+        catch (error) { return json(res, 400, { error: protonPassProblem(error) }); }
+      }
+      if (path === `${PROTON_PASS}/refresh` && method === "POST") return json(res, 200, { protonPass: await source.refresh() });
+      if (path === PROTON_PASS && method === "DELETE") return json(res, 200, { protonPass: await source.disconnect() });
+      const vault = PROTON_VAULT.exec(path);
+      if (vault && method === "PATCH") {
+        const body = await readBody(req, 16_384);
+        const bots = parseBots(body && typeof body === "object" ? body.bots : undefined, deps.botExists);
+        if (!bots.ok || bots.value === undefined) return json(res, 400, { error: bots.ok ? LOGIN_ERRORS.bots : bots.error });
+        const status = source.grant(vault[1]!, bots.value);
+        return status ? json(res, 200, { protonPass: status }) : json(res, 404, { error: "no such vault" });
+      }
+      return json(res, 405, { error: "method not allowed" });
+    }
     // 1Password's own paths, ahead of the /api/logins/:id pattern they would match.
     if (path === ONE_PASSWORD && method === "POST") {
       const body = await readBody(req, 16_384);
@@ -120,6 +155,7 @@ export function createLoginRoutes(deps: LoginRouteDeps): RouteHandler {
     }
     const id = path.slice("/api/logins/".length);
     if (/^1password(?::|%3a)/iu.test(id)) return json(res, 409, { error: LOGIN_ERRORS.readOnly });
+    if (/^protonpass(?::|%3a)/iu.test(id)) return json(res, 409, { error: "This login is in Proton Pass. Change or remove it there." });
     if (!ID.test(id)) return json(res, 404, { error: "no such login" });
     if (method === "DELETE") {
       return deps.remove(id) ? json(res, 200, { ok: true }) : json(res, 404, { error: "no such login" });

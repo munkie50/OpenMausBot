@@ -6,7 +6,7 @@ import { loginLabel, loginOriginCheck, loginPageCheck, type LoginPlace } from ".
 import { scrubHeldSecrets } from "../shared/redact.ts";
 import type { SecretHold } from "./browser-secret-hold.ts";
 import type { FillCandidate } from "./login-vault-source.ts";
-import { totpCode, type TotpKey } from "./totp.ts";
+import { totpCode } from "./totp.ts";
 
 export type { FillCandidate } from "./login-vault-source.ts";
 
@@ -30,6 +30,7 @@ export interface FillLoginInput {
   available(): Promise<Array<LoginPlace & { username: string }>>;
   /** Why 1Password's logins may be missing just now. */
   trouble?(): string | undefined;
+  vaultTrouble?(): string | undefined;
 }
 
 export type FilledField = "username" | "password" | "code";
@@ -285,7 +286,9 @@ export async function fillLogin(input: FillLoginInput, deps: FillLoginDeps): Pro
   if (!all.length) {
     const trouble = input.trouble?.();
     const missing = trouble ? ` 1Password could not be read just now, so its logins may be missing: ${trouble}` : "";
-    return { ok: false, host: pageHost, text: `No saved login for ${pageHost}. A login fills on its own site and the sign-in hosts saved with it, never on another site. ${listed(await input.available())}${missing} Open that site's login page, or call request_sign_in so the person signs in.` };
+    const vaultTrouble = input.vaultTrouble?.();
+    const otherMissing = vaultTrouble ? ` Vault logins may be missing: ${vaultTrouble}` : "";
+    return { ok: false, host: pageHost, text: `No saved login for ${pageHost}. A login fills on its own site and the sign-in hosts saved with it, never on another site. ${listed(await input.available())}${missing}${otherMissing} Open that site's login page, or call request_sign_in so the person signs in.` };
   }
   let chosen = all;
   const wanted = input.username?.trim();
@@ -336,7 +339,7 @@ class LoginRun {
   private readonly host: string;
   private readonly deadline: number;
   private readonly done = new Set<FilledField>();
-  private secrets: { password: string; totp: TotpKey | null } | null = null;
+  private secrets: Awaited<ReturnType<FillCandidate["secrets"]>> | null = null;
   private secretUrl: string | null = null;
 
   constructor(login: FillCandidate, options: { submit: boolean; host: string; deps: FillLoginDeps; now: () => number; sleep: (ms: number) => Promise<void> }) {
@@ -358,7 +361,8 @@ class LoginRun {
   }
 
   private who(): string {
-    return `${this.login.username || "the saved login"}${this.login.source === "1password" ? " (from 1Password)" : ""}`;
+    const from = this.login.source === "1password" ? " (from 1Password)" : this.login.source === "protonpass" ? " (from Proton Pass)" : "";
+    return `${this.login.username || "the saved login"}${from}`;
   }
 
   private filledWords(): string {
@@ -469,7 +473,7 @@ class LoginRun {
   }
 
   private secretsHaveTotp(): boolean {
-    return Boolean(this.secrets?.totp);
+    return Boolean(this.secrets?.totp || this.login.oneTimeCode);
   }
 
   private signedIn(href: string, title: string): string {
@@ -504,17 +508,19 @@ class LoginRun {
       return result === "typed" || result === "kept";
     };
     if (fields.username && this.login.username && await fill("username", this.login.username, this.login.username)) typed.push(["username", "username"]);
-    if (!moved && (fields.password || fields.code > 0)) {
+    if (!moved && (fields.password || (fields.code > 0 && !this.login.oneTimeCode))) {
       this.secrets ??= await this.login.secrets();
       this.deps.remember(this.secrets.password, "password");
       if (this.secrets.totp) this.deps.remember(this.secrets.totp.secret, "password");
     }
     if (!moved && fields.password && this.secrets && await fill("password", this.secrets.password)) typed.push(["password", "password"]);
-    if (!moved && fields.code > 0 && this.secrets?.totp) {
-      const totp = this.secrets.totp;
-      const left = totp.period * 1000 - (this.now() % (totp.period * 1000));
-      if (left < 3_000) await this.sleep(left + 250);
-      const code = totpCode(totp, this.now());
+    if (!moved && fields.code > 0 && this.secretsHaveTotp()) {
+      const totp = this.secrets?.totp;
+      if (totp) {
+        const left = totp.period * 1000 - (this.now() % (totp.period * 1000));
+        if (left < 3_000) await this.sleep(left + 250);
+      }
+      const code = this.login.oneTimeCode ? await this.login.oneTimeCode() : totpCode(totp!, this.now());
       this.deps.remember(code, "code");
       const boxes = fields.code === 1 ? 1 : Math.min(fields.code, code.length);
       let last = "";
