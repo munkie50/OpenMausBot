@@ -159,6 +159,35 @@ describe("the saved logins store", () => {
   });
 });
 
+describe("Proton Pass token storage", () => {
+  it("seals the PAT beside 1Password, masks it, and preserves independent grants across disconnects", () => {
+    const store = new LoginStore({ dataDir: dir });
+    const protonToken = "pst_fake-token::FAKE";
+    const onePasswordToken = "ops_fake-other-token";
+    store.setOnePasswordToken(onePasswordToken);
+    store.setOnePasswordGrant("v1", ["quill"]);
+    store.setProtonPassToken(protonToken);
+    expect(store.protonPassGrants()).toEqual({});
+    store.setProtonPassGrant("v1", ["pepper"]);
+    store.setProtonPassGrant("v2", []);
+    const reopened = new LoginStore({ dataDir: dir });
+    expect(reopened.protonPassToken()).toBe(protonToken);
+    expect(reopened.protonPassGrants()).toEqual({ v1: ["pepper"], v2: [] });
+    expect(reopened.onePasswordToken()).toBe(onePasswordToken);
+    expect(reopened.onePasswordGrants()).toEqual({ v1: ["quill"] });
+    expect(readFileSync(join(dir, LOGINS_FILE)).includes(Buffer.from(protonToken))).toBe(false);
+    const held = new HeldSecrets(store);
+    expect(held.scrub(`Token ${protonToken}`)).not.toContain(protonToken);
+    store.setProtonPassToken(null);
+    expect(new LoginStore({ dataDir: dir }).protonPassToken()).toBeNull();
+    expect(store.protonPassGrants()).toEqual({ v1: ["pepper"], v2: [] });
+    expect(store.onePasswordToken()).toBe(onePasswordToken);
+    expect(store.secretValues()).toEqual([onePasswordToken]);
+    store.setProtonPassGrant("v1", "all");
+    expect(new LoginStore({ dataDir: dir }).protonPassGrants()).toEqual({ v2: [] });
+  });
+});
+
 describe("the held-secret scrubber", () => {
   it("masks a saved password in every form a page or a log can show it", () => {
     const store = new LoginStore({ dataDir: dir });

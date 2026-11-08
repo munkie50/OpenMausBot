@@ -7,6 +7,8 @@ export interface FillCandidate extends LoginPlace {
   username: string;
   source: LoginSource;
   secrets(): Promise<{ password: string; totp: TotpKey | null }>;
+  /** A vault-generated code, requested only when the page has a one-time-code field. */
+  oneTimeCode?(): Promise<string>;
 }
 
 export interface VaultStatus {

@@ -7,8 +7,8 @@
 import { getDomain } from "tldts";
 
 /** Where a login came from: the sign-in card's Save, Settings, or the person's
- * 1Password vault (read-only here). */
-export type LoginSource = "card" | "settings" | "1password";
+ * password vault (read-only here). */
+export type LoginSource = "card" | "settings" | "1password" | "protonpass";
 
 /** Which bots may use a login: every bot, or the ones named. */
 export type LoginBots = "all" | string[];
@@ -31,8 +31,8 @@ export interface LoginPlace {
 export interface LoginSummary extends LoginPlace {
   id: string;
   username: string;
-  /** A 2FA setup key is saved, so the one-time code is filled too. */
-  hasTotp: boolean;
+  /** Whether a one-time code is available; omitted when discovery cannot check without reading a secret. */
+  hasTotp?: boolean;
   source: LoginSource;
   bots: LoginBots;
   createdAt: number;
@@ -55,6 +55,22 @@ export interface OnePasswordStatus {
   connected: boolean;
   vaults?: OnePasswordVault[];
   /** How many items have a website and a password, across every vault. */
+  items?: number;
+  error?: string;
+}
+
+/** A Proton Pass vault visible to the personal access token. Items count logins with a website, before secret reads. */
+export interface ProtonPassVault {
+  id: string;
+  title: string;
+  items: number;
+  bots: LoginBots;
+}
+
+/** Proton Pass connection metadata. The personal access token never leaves the server. */
+export interface ProtonPassStatus {
+  connected: boolean;
+  vaults?: ProtonPassVault[];
   items?: number;
   error?: string;
 }
