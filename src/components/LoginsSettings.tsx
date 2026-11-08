@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { KeyRound, Loader2, LockKeyhole, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 
-import { loginHeldBackFor, type LoginBots, type LoginSummary, type OnePasswordStatus, type OnePasswordVault } from "../../shared/logins";
+import { loginHeldBackFor, type LoginBots, type LoginSummary, type OnePasswordStatus, type OnePasswordVault, type ProtonPassStatus } from "../../shared/logins";
 import { t } from "@/lib/i18n";
-import { addLogin, changeLogin, connectOnePassword, deleteLogin, disconnectOnePassword, grantVault, listLogins, refreshOnePassword } from "@/lib/logins";
+import { addLogin, changeLogin, connectOnePassword, connectProtonPass, deleteLogin, disconnectOnePassword, disconnectProtonPass, grantVault, listLogins, refreshOnePassword } from "@/lib/logins";
 import { relativeTime } from "@/lib/memory";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useStore } from "@/state/store";
@@ -16,6 +16,7 @@ const SOURCE_KEYS = {
   card: "settings.logins.source.card",
   settings: "settings.logins.source.settings",
   "1password": "settings.logins.source.1password",
+  protonpass: "settings.logins.source.protonpass",
 } as const;
 
 const ROW_BUTTON = "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50";
@@ -26,6 +27,7 @@ export function LoginsSettings() {
   const bots = state.bots.map((bot) => ({ id: bot.id, name: bot.name }));
   const [logins, setLogins] = useState<LoginSummary[] | null>(null);
   const [onePassword, setOnePassword] = useState<OnePasswordStatus>({ connected: false });
+  const [protonPass, setProtonPass] = useState<ProtonPassStatus>({ connected: false });
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [site, setSite] = useState("");
@@ -43,6 +45,7 @@ export function LoginsSettings() {
       const answer = await listLogins();
       setLogins(answer.logins);
       setOnePassword(answer.onePassword ?? { connected: false });
+      setProtonPass(answer.protonPass ?? { connected: false });
       setError(null);
     }
     catch (cause) { setError(cause instanceof Error && cause.message ? cause.message : t("settings.logins.loadError")); }
@@ -98,7 +101,7 @@ export function LoginsSettings() {
                     <div dir="auto" className="truncate text-[12px] text-ink-secondary">{login.username || t("settings.logins.noUsername")}</div>
                     {signInHostsLine(login) && <div dir="ltr" className="truncate text-[12px] text-ink-tertiary" data-login-hosts>{signInHostsLine(login)}</div>}
                     <div className="mt-0.5 text-[12px] leading-snug text-ink-tertiary">
-                      {[login.source === "protonpass" ? "Proton Pass" : t(SOURCE_KEYS[login.source]), botNames(login.bots),
+                      {[t(SOURCE_KEYS[login.source]), botNames(login.bots),
                         login.lastUsedAt ? t("settings.logins.used", { when: relativeTime(login.lastUsedAt) }) : t("settings.logins.neverUsed")].join(" · ")}
                     </div>
                     {loginHeldBackFor(login, state.bots).length > 0 && (
@@ -169,6 +172,8 @@ export function LoginsSettings() {
         {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
         <OnePasswordConnection status={onePassword} disabled={logins === null} bots={bots} botNames={botNames}
           onChange={async (next) => { setOnePassword(next); await load(); }} />
+        <ProtonPassConnection status={protonPass} disabled={logins === null}
+          onChange={async (next) => { setProtonPass(next); await load(); }} />
       </div>
     </Card>
   );
@@ -296,6 +301,67 @@ function OnePasswordConnection({ status, disabled, bots, botNames, onChange }: {
       <p className="flex items-start gap-1 text-[12px] leading-snug text-ink-tertiary">
         <LockKeyhole size={11} aria-hidden="true" className="mt-[3px] shrink-0" /> {t("settings.logins.onePassword.note")}
       </p>
+      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+    </section>
+  );
+}
+
+function ProtonPassConnection({ status, disabled, onChange }: {
+  status: ProtonPassStatus;
+  disabled: boolean;
+  onChange: (status: ProtonPassStatus) => Promise<void>;
+}) {
+  const [token, setToken] = useState("");
+  const [busy, setBusy] = useState<"connect" | "disconnect" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (kind: NonNullable<typeof busy>, work: () => Promise<ProtonPassStatus>) => {
+    if (busy) return;
+    setBusy(kind);
+    setError(null);
+    try {
+      const next = await work();
+      if (kind === "connect") setToken("");
+      await onChange(next);
+    }
+    catch (cause) { setError(cause instanceof Error && cause.message ? cause.message : t("settings.logins.protonPass.error")); }
+    finally { setBusy(null); }
+  };
+  const connect = (event: FormEvent) => {
+    event.preventDefault();
+    if (token.trim()) void run("connect", () => connectProtonPass(token.trim()));
+  };
+  return (
+    <section className="mt-1 flex flex-col gap-2 border-t border-hairline/30 pt-3" aria-label={t("settings.logins.protonPass.title")} data-protonpass>
+      <div className="text-[13px] font-medium text-ink">{t("settings.logins.protonPass.title")}</div>
+      {status.connected ? (
+        <>
+          <p className="text-[13px] leading-snug text-ink-secondary">
+            {t("settings.logins.protonPass.connected", { vaults: (status.vaults ?? []).map((vault) => vault.title).join(", ") || "—", count: String(status.items ?? 0) })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="ui-button ui-button-md" disabled={disabled || busy !== null} onClick={() => void run("disconnect", disconnectProtonPass)}>
+              {busy === "disconnect" && <Loader2 size={13} className="animate-spin" />}{t("settings.logins.protonPass.disconnect")}
+            </button>
+          </div>
+        </>
+      ) : (
+        <form className="flex flex-col gap-2" onSubmit={connect}>
+          <p className="text-[12px] leading-relaxed text-ink-secondary">{t("settings.logins.protonPass.guide")}</p>
+          <div className="flex flex-wrap gap-2">
+            <input name="protonPassToken" type="password" autoComplete="off" spellCheck={false} maxLength={8192} value={token}
+              onChange={(event) => setToken(event.target.value)} disabled={disabled || busy !== null}
+              aria-label={t("settings.logins.protonPass.token")} placeholder={t("settings.logins.protonPass.token")}
+              className="min-w-0 flex-1 rounded-lg border border-hairline/60 bg-inset px-3 py-1.5 text-[13px] text-ink outline-none placeholder:text-ink-tertiary focus:border-accent disabled:opacity-60" />
+            <button type="submit" className="ui-button ui-button-md ui-button-primary" disabled={disabled || busy !== null || !token.trim()}>
+              {busy === "connect" && <Loader2 size={13} className="animate-spin" />}{t("settings.logins.protonPass.connect")}
+            </button>
+          </div>
+        </form>
+      )}
+      <p className="flex items-start gap-1 text-[12px] leading-snug text-ink-tertiary">
+        <LockKeyhole size={11} aria-hidden="true" className="mt-[3px] shrink-0" /> {t("settings.logins.protonPass.note")}
+      </p>
+      {status.error && <p role="alert" className="text-[12px] text-danger">{status.error}</p>}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
     </section>
   );

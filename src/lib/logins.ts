@@ -1,4 +1,4 @@
-import type { LoginBots, LoginSummary, OnePasswordStatus } from "../../shared/logins";
+import type { LoginBots, LoginSummary, OnePasswordStatus, ProtonPassStatus } from "../../shared/logins";
 import type { ComputerHelpRef } from "../../shared/wire";
 import { api } from "@/state/store";
 
@@ -9,8 +9,8 @@ export interface LoginFieldsInput {
   totp: string;
 }
 
-export async function listLogins(): Promise<{ logins: LoginSummary[]; onePassword: OnePasswordStatus }> {
-  return await api<{ logins: LoginSummary[]; onePassword: OnePasswordStatus }>("/api/logins");
+export async function listLogins(): Promise<{ logins: LoginSummary[]; onePassword: OnePasswordStatus; protonPass?: ProtonPassStatus }> {
+  return await api<{ logins: LoginSummary[]; onePassword: OnePasswordStatus; protonPass?: ProtonPassStatus }>("/api/logins");
 }
 
 /** The server checks the token reaches 1Password before keeping it, and never sends it back. */
@@ -24,6 +24,14 @@ export async function refreshOnePassword(): Promise<OnePasswordStatus> {
 
 export async function disconnectOnePassword(): Promise<OnePasswordStatus> {
   return (await api<{ onePassword: OnePasswordStatus }>("/api/logins/1password", { method: "DELETE" })).onePassword;
+}
+
+export async function connectProtonPass(token: string): Promise<ProtonPassStatus> {
+  return (await api<{ protonPass: ProtonPassStatus }>("/api/logins/protonpass", { method: "POST", body: JSON.stringify({ token }) })).protonPass;
+}
+
+export async function disconnectProtonPass(): Promise<ProtonPassStatus> {
+  return (await api<{ protonPass: ProtonPassStatus }>("/api/logins/protonpass", { method: "DELETE" })).protonPass;
 }
 
 export async function addLogin(site: string, fields: LoginFieldsInput, bots: LoginBots, exactHost = false): Promise<LoginSummary> {
