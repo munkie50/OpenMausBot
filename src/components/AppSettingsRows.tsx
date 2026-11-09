@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { builtInBrowserEnabled, showToolCallsEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { builtInBrowserEnabled, hideSkillNoticesEnabled, showToolCallsEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { localeChoices } from "@/locales";
 import { activeLocale, activePackComplete, t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
@@ -376,6 +376,46 @@ export function ToolCallsRow() {
       <Switch
         checked={enabled}
         aria-label={t("settings.toolCalls.aria")}
+        disabled={saving}
+        onClick={() => void toggle()}
+        className="disabled:cursor-wait disabled:opacity-50"
+      />
+    </SettingRow>
+  );
+}
+
+export function SkillNoticesRow() {
+  const { state, dispatch } = useStore();
+  const hidden = hideSkillNoticesEnabled(state.config);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const toggle = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const config: ConfigStatus = await api("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ features: { hideSkillNotices: !hidden } }),
+      });
+      dispatch({ type: "configStatus", config });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("settings.skillNotices.error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingRow
+      title={t("settings.skillNotices.title")}
+      subtitle={t("settings.skillNotices.subtitle")}
+      message={error ? <p role="alert" className="text-danger">{error}</p> : null}
+    >
+      <Switch
+        checked={hidden}
+        aria-label={t("settings.skillNotices.aria")}
         disabled={saving}
         onClick={() => void toggle()}
         className="disabled:cursor-wait disabled:opacity-50"

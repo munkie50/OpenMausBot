@@ -66,7 +66,7 @@ import { NotificationRows } from "./NotificationSettingsRows";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { Select } from "./Select";
 import { SavedStepsRow } from "./SavedStepsRow";
-import { BrowserProfilesRow, ColorUserBubblesRow, AdvancedModeRow, ExperimentalFeaturesRow, LanguageRow, NewBotEffortRow, PinnedCirclesRow, ReplayTourRow, RunCardRow, FollowUpRow, SendKeyRow, ShowThreadsRow, ToolCallsRow, UniversalPinsRow, UpdatesRow } from "./AppSettingsRows";
+import { BrowserProfilesRow, ColorUserBubblesRow, AdvancedModeRow, ExperimentalFeaturesRow, LanguageRow, NewBotEffortRow, PinnedCirclesRow, ReplayTourRow, RunCardRow, FollowUpRow, SendKeyRow, ShowThreadsRow, SkillNoticesRow, ToolCallsRow, UniversalPinsRow, UpdatesRow } from "./AppSettingsRows";
 import { SIMPLE_ADVANCED_ONLY, SIMPLE_MORE_LIMITS, SimpleAiPage, SimpleBillingPage, SimpleComputerPage, SimpleGeneralPage, SimpleLooksPage, SimpleMorePage, SimpleUpdatesPage, type Disclose, type SimpleDisclosureId } from "./SettingsSimplePages";
 
 // labelKey, not a label: t() reads the active pack when called, so a label resolved at module scope would freeze the
@@ -407,6 +407,7 @@ export function SettingsModal() {
             <UniversalPinsRow />
             <NotificationRows />
             {!remoteActive && <ToolCallsRow />}
+            <SkillNoticesRow />
             <RunCardRow />
           </>
         );

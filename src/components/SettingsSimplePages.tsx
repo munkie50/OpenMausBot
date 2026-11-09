@@ -34,7 +34,7 @@ import { ProfileSummaryRow } from "./ProfileSettings";
 import { ImportSettings } from "./ImportSettings";
 import { NotificationRows } from "./NotificationSettingsRows";
 import { useServerUpdateItem } from "./SidebarProfileMenu";
-import { AdvancedModeRow, BrowserProfilesRow, ColorUserBubblesRow, FollowUpRow, LanguageRow, ReplayTourRow, SendKeyRow, ToolCallsRow, UpdatesRow } from "./AppSettingsRows";
+import { AdvancedModeRow, BrowserProfilesRow, ColorUserBubblesRow, FollowUpRow, LanguageRow, ReplayTourRow, SendKeyRow, SkillNoticesRow, ToolCallsRow, UpdatesRow } from "./AppSettingsRows";
 import { RoomTurnTimeoutSettings } from "./RoomTurnTimeoutSettings";
 import { McpCallTimeoutSettings } from "./McpCallTimeoutSettings";
 import { ThreadConcurrencySettings } from "./ThreadConcurrencySettings";
@@ -147,6 +147,7 @@ export function SimpleLooksPage({ onBack, toolCalls = true }: { onBack: () => vo
       <div><button type="button" className="ui-button" onClick={onBack}>{t("settings.simple.looks.back")}</button></div>
       <div data-settings-block="looks"><SkinPicker /></div>
       {toolCalls && <SettingsRows><ToolCallsRow /></SettingsRows>}
+      <SettingsRows><SkillNoticesRow /></SettingsRows>
     </>
   );
 }

@@ -53,7 +53,8 @@ import { stopNoticeDue, useStoppedAt } from "@/lib/stop-turn";
 import { THIS_COMPUTER_NOT_READY } from "../../shared/your-computer";
 import { BotAvatar } from "./Avatar";
 import { TurnPresence } from "./TurnPresence";
-import { showToolCallsEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { hideSkillNoticesEnabled, showToolCallsEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { withoutSkillNotices } from "@/lib/skill-notices";
 import { normalizeState, stateForBot } from "@/lib/mascot";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
 import { showWorkingDots } from "@/lib/turn-tail";
@@ -848,7 +849,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   }, []);
 
   const { messages: allMessages, activeLeafId } = bot;
-  const messages = useMemo(() => visibleMessages({ messages: allMessages, activeLeafId }), [allMessages, activeLeafId]);
+  const hideSkillNotices = hideSkillNoticesEnabled(state.config);
+  const messages = useMemo(() => withoutSkillNotices(visibleMessages({ messages: allMessages, activeLeafId }), hideSkillNotices), [allMessages, activeLeafId, hideSkillNotices]);
   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
   const liveTools = useLiveToolIds(messages, bot);
   const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);

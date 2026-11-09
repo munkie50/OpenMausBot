@@ -11804,6 +11804,7 @@ function configStatus() {
       skillsLibrary: skillsLibraryEnabled(cfg),
       shareLearnedSkills: skillsHost.mode(),
       showToolCalls: showToolCallsEnabled(cfg),
+      hideSkillNotices: cfg.features?.hideSkillNotices === true,
       browser: builtInBrowserEnabled(cfg),
       sharedComputers: sharedComputersEnabled(cfg),
       claudeUserMcp: claudeUserMcpEnabled(cfg),

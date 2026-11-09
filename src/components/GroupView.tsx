@@ -23,7 +23,8 @@ import { ThreadChip } from "./ThreadChip";
 import { ToolActivity } from "./ToolActivity";
 import { ThreadRefText } from "./ThreadRefs";
 import { TurnPresence } from "./TurnPresence";
-import { showToolCallsEnabled } from "@/lib/feature-flags";
+import { hideSkillNoticesEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
+import { isSettledSkillNotice } from "@/lib/skill-notices";
 import { CompactionChip, DigestChip } from "./DigestChip";
 import { roomActivityVisible } from "@/lib/room-activity";
 import { StatusActivityRow } from "@/components/StatusActivityRow"; import { BugReportNote } from "@/components/BugReportNote";
@@ -327,12 +328,14 @@ export const Transcript = memo(function Transcript({
   const { state, dispatch } = useStore();
   const showThreads = useShowThreads();
   const showToolCalls = showToolCallsEnabled(state.config);
+  const hideSkillNotices = hideSkillNoticesEnabled(state.config);
   const canReact = useCanReact(group.threadId);
   const memberOf = (id?: string) => members.find((b) => b.id === id);
   const folds = useMemo(() => roomTurnFolds(messages), [messages, locale]);
   const items = useMemo(() => groupActivityRuns(messages.filter(message =>
     !folds.hiddenIds.has(message.id) &&
-    (message.kind !== "activity" || roomActivityVisible(message, showToolCalls)))), [messages, showToolCalls, folds]);
+    !(hideSkillNotices && isSettledSkillNotice(message)) &&
+    (message.kind !== "activity" || roomActivityVisible(message, showToolCalls)))), [messages, showToolCalls, hideSkillNotices, folds]);
   const newestMessageId = messages.at(-1)?.id;
   const newestUserMessageId = [...messages].reverse().find((message) => message.role === "user")?.id;
   const roomBusy = roomThreadWorking(group, group.threadId);
