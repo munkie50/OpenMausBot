@@ -41,7 +41,10 @@ else if (args[0] === "vault") {
 } else if (args[0] === "item" && args[1] === "list") {
   const vaultId = args[args.indexOf("--share-id") + 1];
   if (mode === "revoked-vault") fail(`Forbidden 403: ${token}`);
-  json({ items: [{ id: "i1", share_id: vaultId, title: "Fixture login", item_type: "login", state: "Active", future: true }], folders: [], future: true });
+  if (args.includes("--show-secrets")) json({ items: [{ id: "i1", share_id: vaultId, vault_id: "vault", state: "Active", future: true,
+    content: { title: "Fixture login", note: "", content: { Login: { email: "", username: vaultId === "v1" ? "alice@example.com" : "treasurer", password,
+      urls: vaultId === "v1" ? ["https://accounts.example.com/login", "https://login.example.org"] : ["https://bank.example.net"], totp_uri: "fake-secret-not-for-discovery", passkeys: [] } } } }], folders: [], future: true });
+  else json({ items: [{ id: "i1", share_id: vaultId, title: "Fixture login", item_type: "login", state: "Active", future: true }], folders: [], future: true });
 } else if (args[0] === "item" && args[1] === "view") {
   const uri = /^pass:\/\/([^/]+)\/([^/]+)(?:\/(.+))?$/u.exec(args[2] ?? "");
   if (!uri) fail("Unknown URI");

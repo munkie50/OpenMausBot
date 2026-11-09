@@ -9,7 +9,7 @@ import { BotLogins } from "./bot-logins.ts";
 import { fillLogin } from "./login-fill.ts";
 import { HeldSecrets, LOGINS_FILE, LoginStore } from "./login-store.ts";
 import { isOnePasswordLoginId, OnePasswordLogins, sdkOnePasswordClient } from "./onepassword.ts";
-import { cliProtonPassClient, isProtonPassLoginId, PROTON_PASS_NO_TOTP, ProtonPassError, ProtonPassLogins, protonPassItems, protonPassPassword, protonPassProblem } from "./protonpass.ts";
+import { cliProtonPassClient, isProtonPassLoginId, PROTON_PASS_NO_TOTP, ProtonPassError, ProtonPassLogins, protonPassLogins, protonPassPassword, protonPassProblem } from "./protonpass.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import { FakeLoginPage, LOGIN_FORM } from "./testing/fake-login-page.ts";
 import { fakeOnePasswordSdk } from "./testing/fake-onepassword.ts";
@@ -58,16 +58,22 @@ function cliFixture(options: { timeoutMs?: number; maxBuffer?: number } = {}) {
 }
 
 describe("Proton Pass output", () => {
-  it("parses list summaries and ignores unknown keys and inactive or non-login items", () => {
-    const item = { id: "i1", share_id: "v1", title: "Example", item_type: "login", state: "Active" };
-    expect(protonPassItems({ items: [{ ...item, extra: { unknown: true } }, { ...item, id: "i2", state: "Trashed" }, { ...item, id: "i3", item_type: "note" }], folders: [], extra: true }, "v1"))
-      .toEqual([{ id: "i1", title: "Example" }]);
-    expect(protonPassItems({ items: [] }, "v1")).toEqual([]);
+  it("parses the bulk list, keeps only non-secret fields and ignores unknown keys and inactive or non-login items", () => {
+    const login = { email: "", username: "alice", password: PASSWORD, urls: ["https://a.example"], totp_uri: "otpauth://secret", passkeys: [] };
+    const item = { id: "i1", share_id: "v1", state: "Active", content: { title: "Example", content: { Login: login } } };
+    const parsed = protonPassLogins({ items: [{ ...item, extra: { unknown: true } }, { ...item, id: "i2", state: "Trashed" },
+      { ...item, id: "i3", content: { title: "Note", content: { Note: {} } } },
+      { ...item, id: "i4", content: { title: "Email only", content: { Login: { ...login, username: "", email: "e@example.com", urls: undefined } } } }], folders: [], extra: true }, "v1");
+    expect(parsed).toEqual([{ id: "i1", title: "Example", username: "alice", urls: ["https://a.example"] }, { id: "i4", title: "Email only", username: "e@example.com", urls: [] }]);
+    expect(JSON.stringify(parsed)).not.toContain(PASSWORD);
+    expect(JSON.stringify(parsed)).not.toContain("otpauth");
+    expect(protonPassLogins({ items: [] }, "v1")).toEqual([]);
   });
 
-  it.each([null, [], { items: {} }, { items: [null] }, { items: [{ id: "i1", share_id: "wrong", title: "A", item_type: "login" }] },
-    { items: [{ id: "i1", share_id: "v1", title: {}, item_type: "login" }] }, { items: [], folders: {} }])("rejects an unexpected list shape without its contents", (value) => {
-    expect(() => protonPassItems(value, "v1")).toThrow("Unexpected Proton Pass output");
+  const listed = (patch: Record<string, unknown>) => ({ items: [{ id: "i1", share_id: "v1", content: { title: "A", content: { Login: { username: "u", urls: [] } } }, ...patch }] });
+  it.each([null, [], { items: {} }, { items: [null] }, listed({ share_id: "wrong" }), listed({ content: { title: {}, content: { Login: {} } } }),
+    listed({ content: { title: "A", content: { Login: { urls: "https://a.example" } } } }), { items: [], folders: {} }])("rejects an unexpected list shape without its contents", (value) => {
+    expect(() => protonPassLogins(value, "v1")).toThrow("Unexpected Proton Pass output");
   });
 
   it("validates every consumed view field and the identity of the item", () => {
@@ -83,7 +89,7 @@ describe("Proton Pass output", () => {
 });
 
 describe("the pass-cli adapter", () => {
-  it("discovers through non-secret fields only, with the token only in a private child environment", async () => {
+  it("keeps only non-secret fields from discovery, with the token only in a private child environment", async () => {
     const { dir, client, calls } = cliFixture();
     vi.stubEnv("PROTON_PASS_SESSION_DIR", join(dir, "untrusted"));
     vi.stubEnv("PROTON_PASS_KEY_PROVIDER", "keyring");
@@ -95,7 +101,11 @@ describe("the pass-cli adapter", () => {
     expect(await cli.vaults()).toEqual([{ id: "v1", title: "Bots" }, { id: "v2", title: "Finance" }]);
     expect(await cli.loginItems("v1")).toEqual([{ id: "i1", title: "Fixture login" }]);
     expect(await cli.metadata("v1", "i1")).toEqual({ username: "alice@example.com", urls: ["https://accounts.example.com/login", "https://login.example.org"] });
-    expect(calls().filter((call) => call.args[1] === "view").map((call) => call.args[2])).toEqual(["pass://v1/i1/username", "pass://v1/i1/urls"]);
+    // One list call per vault; listed logins need no per-item views.
+    expect(calls().filter((call) => call.args[0] === "item" && call.args[1] === "list").map((call) => call.args.includes("--show-secrets"))).toEqual([true]);
+    expect(calls().filter((call) => call.args[1] === "view")).toEqual([]);
+    expect(await cli.metadata("v2", "i1")).toEqual({ username: "treasurer", urls: ["https://bank.example.net"] });
+    expect(calls().filter((call) => call.args[1] === "view").map((call) => call.args[2])).toEqual(["pass://v2/i1/username", "pass://v2/i1/urls"]);
     expect(calls().every((call) => call.tokenMatches && call.keyProvider === "fs" && call.logLevel === "off")).toBe(true);
     expect(calls().every((call) => JSON.stringify(call.protonEnvNames) === JSON.stringify(["PROTON_PASS_KEY_PROVIDER", "PROTON_PASS_PERSONAL_ACCESS_TOKEN", "PROTON_PASS_SESSION_DIR"]))).toBe(true);
     const session = calls()[0]!.session;
