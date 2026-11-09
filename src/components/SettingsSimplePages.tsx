@@ -82,6 +82,7 @@ export function SimpleGeneralPage({ has, peopleOpen, onLooks, onMore }: { has: H
             <ChromeRailRow />
             <WindowFrameRow />
             <ColorUserBubblesRow simple />
+            <SkillNoticesRow />
           </SettingsRows>
         </SettingsGroup>
       )}
@@ -147,7 +148,6 @@ export function SimpleLooksPage({ onBack, toolCalls = true }: { onBack: () => vo
       <div><button type="button" className="ui-button" onClick={onBack}>{t("settings.simple.looks.back")}</button></div>
       <div data-settings-block="looks"><SkinPicker /></div>
       {toolCalls && <SettingsRows><ToolCallsRow /></SettingsRows>}
-      <SettingsRows><SkillNoticesRow /></SettingsRows>
     </>
   );
 }
