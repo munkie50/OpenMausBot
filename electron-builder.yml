@@ -1,6 +1,9 @@
-appId: com.openmausbot.app
-productName: OpenMausBot
-artifactName: OpenMausBot-${version}-${arch}.${ext}
+appId: com.openmausbot.fork
+productName: OpenMausBot Fork
+# Distinct package name: a one-click per-user install goes to Programs/<name>, so this keeps the fork out of the official app's folder.
+extraMetadata:
+  name: openmausbot-fork
+artifactName: OpenMausBot-Fork-${version}-${arch}.${ext}
 
 protocols:
   - name: OpenMausBot package install
@@ -15,7 +18,7 @@ protocols:
 # stranded on its installed version.
 publish:
   - provider: github
-    owner: milind-soni
+    owner: munkie50
     repo: OpenMausBot
 
 directories:
@@ -194,11 +197,11 @@ win:
 nsis:
   oneClick: true
   perMachine: false
-  shortcutName: OpenMausBot
+  shortcutName: OpenMausBot Fork
   # Versioned, like the .dmg. The README's /latest/download/ button needs a
   # STABLE filename, so ship a second copy named OpenMausBot-setup.exe on the
   # release — the same trick as OpenMausBot.dmg beside OpenMausBot-${version}.dmg.
-  artifactName: OpenMausBot-${version}-setup.${ext}
+  artifactName: OpenMausBot-Fork-${version}-setup.${ext}
 
 linux:
   target:
