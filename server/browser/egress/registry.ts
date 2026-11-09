@@ -14,7 +14,7 @@ import { opensReddit, REDDIT_REFUSAL, refusesReddit } from "./reddit.ts";
 
 /** The server (and its fallbacks), webhooks, the desktop client relay, the companion, its control page and its
  * private origin, the Vite dev server and the Local VM's noVNC. */
-const DEFAULT_PORTS = [8799, 18799, 28799, 8800, 8798, 18798, 28798, 8810, 8811, 8812, 5199, 6080];
+const DEFAULT_PORTS = [8799, 18799, 28799, 8800, 8798, 18798, 28798, 8810, 8811, 8812, 5199, 6080, 6081];
 const FLEET_WORKSPACES = 100;
 /** A server's edge, Caddy's admin API, and the workspaces a fleet host runs side by side (server and webhooks). */
 const SERVER_PORTS = [8080, 2019, ...Array.from({ length: FLEET_WORKSPACES }, (_, n) => FLEET_FIRST_PORT + FLEET_PORT_STRIDE * n).flatMap((port) => [port, port + 1])];

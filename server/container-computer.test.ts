@@ -1068,7 +1068,7 @@ describe("setupCommands", () => {
     expect(command).toContain(`--label ${TARGET_LABEL}=${target.label}`);
     expect(command).toContain(`source=${target.workspaceDir},target=${VM_WORKSPACE_GUEST}`);
     expect(command).toContain("-p 127.0.0.1::6901");
-    expect(command).not.toContain("127.0.0.1:6080:6901");
+    expect(command).not.toContain("127.0.0.1:6081:6901");
     expect(args).not.toContain("--userns");
     expect(args).not.toContain("--user");
     expect(command).not.toContain("relabel=");
@@ -1085,8 +1085,8 @@ describe("setupCommands", () => {
 
   it("publishes only the password-protected viewer and only on loopback", () => {
     const command = setupCommands("podman", "linux").run!;
-    expect(command).toContain("-p 127.0.0.1:6080:6901");
-    expect(command).not.toContain(" -p 6080:6901");
+    expect(command).toContain("-p 127.0.0.1:6081:6901");
+    expect(command).not.toContain(" -p 6081:6901");
     expect(command).not.toContain("5900");
     expect(command).toContain("VNC_PW=CHANGE_ME");
   });

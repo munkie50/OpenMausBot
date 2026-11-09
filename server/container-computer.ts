@@ -33,7 +33,8 @@ export const IMAGE_REPOSITORY = "localhost/openmausbot/cua-local-vm";
 export const IMAGE_LAYER_VERSION = "8";
 export const IMAGE_LAYER_LABEL = "com.openmausbot.image-layer";
 export const IMAGE = `${IMAGE_REPOSITORY}:driver-${CUA_DRIVER_VERSION}-v${IMAGE_LAYER_VERSION}`;
-export const CONTAINER = "openmausbot-computer";
+// Fork: its own container and viewer port, so it never touches the official app's Local VM.
+export const CONTAINER = "openmausbot-fork-computer";
 export const MANAGED_LABEL = "com.openmausbot.local-vm";
 export const DRIVER_LABEL = "com.openmausbot.cua-driver";
 export const BASE_IMAGE_LABEL = "com.openmausbot.cua-base";
@@ -50,7 +51,7 @@ export type Runtime = (typeof RUNTIMES)[number];
 export type LifecycleAction = "pull" | "run" | "start" | "stop" | "remove";
 
 const INTERNAL_VIEWER_PORT = 6901;
-const HOST_VIEWER_PORT = 6080;
+const HOST_VIEWER_PORT = 6081;
 const MEMORY_BYTES = 4 * 1024 * 1024 * 1024;
 
 export interface LocalVmTarget {
