@@ -219,7 +219,7 @@ describe("the Vault's saved secrets", () => {
 
 describe("Proton Pass token storage", () => {
   it("seals the PAT beside 1Password, masks it, and preserves independent grants across disconnects", () => {
-    const store = new LoginStore({ dataDir: dir });
+    const store = new VaultStore({ dataDir: dir });
     const protonToken = "pst_fake-token::FAKE";
     const onePasswordToken = "ops_fake-other-token";
     store.setOnePasswordToken(onePasswordToken);
@@ -228,7 +228,7 @@ describe("Proton Pass token storage", () => {
     expect(store.protonPassGrants()).toEqual({});
     store.setProtonPassGrant("v1", ["pepper"]);
     store.setProtonPassGrant("v2", []);
-    const reopened = new LoginStore({ dataDir: dir });
+    const reopened = new VaultStore({ dataDir: dir });
     expect(reopened.protonPassToken()).toBe(protonToken);
     expect(reopened.protonPassGrants()).toEqual({ v1: ["pepper"], v2: [] });
     expect(reopened.onePasswordToken()).toBe(onePasswordToken);
@@ -237,12 +237,12 @@ describe("Proton Pass token storage", () => {
     const held = new HeldSecrets(store);
     expect(held.scrub(`Token ${protonToken}`)).not.toContain(protonToken);
     store.setProtonPassToken(null);
-    expect(new LoginStore({ dataDir: dir }).protonPassToken()).toBeNull();
+    expect(new VaultStore({ dataDir: dir }).protonPassToken()).toBeNull();
     expect(store.protonPassGrants()).toEqual({ v1: ["pepper"], v2: [] });
     expect(store.onePasswordToken()).toBe(onePasswordToken);
     expect(store.secretValues()).toEqual([onePasswordToken]);
     store.setProtonPassGrant("v1", "all");
-    expect(new LoginStore({ dataDir: dir }).protonPassGrants()).toEqual({ v2: [] });
+    expect(new VaultStore({ dataDir: dir }).protonPassGrants()).toEqual({ v2: [] });
   });
 });
 
