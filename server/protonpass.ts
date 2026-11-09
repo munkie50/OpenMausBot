@@ -74,18 +74,23 @@ function json(text: string): unknown {
   try { return JSON.parse(text); } catch { throw new ProtonPassError("unexpected"); }
 }
 
-export function protonPassItems(value: unknown, vaultId: string): ProtonPassItem[] {
+/** Reads one vault's logins from `item list --show-secrets`; keeps only the title, username and URLs. */
+export function protonPassLogins(value: unknown, vaultId: string): Array<ProtonPassItem & ProtonPassMetadata> {
   const output = object(value);
   if (output.folders !== undefined) array(output.folders);
   return array(output.items).flatMap((value) => {
     const item = object(value);
     const itemId = id(item.id);
     if (id(item.share_id) !== vaultId) throw new ProtonPassError("unexpected");
-    const title = string(item.title);
-    const type = string(item.item_type);
     const state = item.state === undefined ? "active" : string(item.state).toLowerCase();
     if (state !== "active" && state !== "trashed") throw new ProtonPassError("unexpected");
-    return type === "login" && state === "active" ? [{ id: itemId, title }] : [];
+    const content = object(item.content);
+    const login = object(content.content).Login;
+    if (state !== "active" || login === undefined) return [];
+    const fields = object(login);
+    const optional = (field: unknown) => field === undefined ? "" : string(field);
+    return [{ id: itemId, title: string(content.title), username: optional(fields.username) || optional(fields.email),
+      urls: fields.urls === undefined ? [] : array(fields.urls).map(string) }];
   });
 }
 
@@ -107,6 +112,8 @@ function privateDirectory(path: string): void {
   chmodSync(path, 0o700);
 }
 
+const LIST_MAX_BUFFER = 32 * 1_048_576;
+
 export function cliProtonPassClient(options: { token: string; dataDir: string; cli?: string; timeoutMs?: number; maxBuffer?: number }): ProtonPassClient {
   return new CliProtonPassClient(options);
 }
@@ -119,6 +126,7 @@ class CliProtonPassClient implements ProtonPassClient {
   private sessionVersion = 0;
   private authenticating: Promise<void> | null = null;
   private closed = false;
+  private readonly listed = new Map<string, ProtonPassMetadata>();
 
   constructor(options: { token: string; dataDir: string; cli?: string; timeoutMs?: number; maxBuffer?: number }) {
     this.root = join(options.dataDir, "proton-pass");
@@ -127,7 +135,7 @@ class CliProtonPassClient implements ProtonPassClient {
     this.options = { token: options.token, cli: options.cli ?? "pass-cli", timeoutMs: options.timeoutMs ?? 15_000, maxBuffer: options.maxBuffer ?? 1_048_576 };
   }
 
-  private async run(args: string[]): Promise<string> {
+  private async run(args: string[], maxBuffer = this.options.maxBuffer): Promise<string> {
     if (this.closed) throw new ProtonPassError("changed");
     try { privateDirectory(this.root); privateDirectory(this.sessionDir); }
     catch { throw new ProtonPassError("private"); }
@@ -142,7 +150,7 @@ class CliProtonPassClient implements ProtonPassClient {
     });
     return new Promise((resolve, reject) => {
       try {
-        execCli(this.options.cli, args, { env, shell: false, timeout: this.options.timeoutMs, maxBuffer: this.options.maxBuffer }, (error, stdout, stderr) => {
+        execCli(this.options.cli, args, { env, shell: false, timeout: this.options.timeoutMs, maxBuffer }, (error, stdout, stderr) => {
           if (!error) { resolve(stdout); return; }
           const failure = error as NodeJS.ErrnoException & { killed?: boolean };
           // CLI diagnostics can contain secrets. Only fixed error messages may leave this adapter.
@@ -177,14 +185,14 @@ class CliProtonPassClient implements ProtonPassClient {
     return run;
   }
 
-  private async command(args: string[]): Promise<string> {
+  private async command(args: string[], maxBuffer?: number): Promise<string> {
     await this.session();
     const version = this.sessionVersion;
-    try { return await this.run(args); }
+    try { return await this.run(args, maxBuffer); }
     catch (error) {
       if (!(error instanceof ProtonPassError) || error.kind !== "auth") throw error;
       await this.session(version);
-      return this.run(args);
+      return this.run(args, maxBuffer);
     }
   }
 
@@ -198,7 +206,13 @@ class CliProtonPassClient implements ProtonPassClient {
   }
 
   async loginItems(vaultId: string): Promise<ProtonPassItem[]> {
-    return protonPassItems(json(await this.command(["item", "list", "--share-id", id(vaultId), "--filter-type", "login", "--filter-state", "active", "--output", "json"])), vaultId);
+    // One list call per vault instead of one view per login: a few hundred logins otherwise take minutes.
+    // The output includes passwords; only the title, username and URLs are kept, and nothing is logged.
+    const logins = protonPassLogins(json(await this.command(["item", "list", "--share-id", id(vaultId), "--filter-type", "login",
+      "--filter-state", "active", "--output", "json", "--show-secrets"], Math.max(this.options.maxBuffer, LIST_MAX_BUFFER))), vaultId);
+    for (const key of this.listed.keys()) if (key.startsWith(`${vaultId}/`)) this.listed.delete(key);
+    for (const login of logins) this.listed.set(`${vaultId}/${login.id}`, { username: login.username, urls: login.urls });
+    return logins.map(({ id, title }) => ({ id, title }));
   }
 
   private uri(vaultId: string, itemId: string): string { return `pass://${id(vaultId)}/${id(itemId)}`; }
@@ -214,6 +228,8 @@ class CliProtonPassClient implements ProtonPassClient {
   }
 
   async metadata(vaultId: string, itemId: string): Promise<ProtonPassMetadata> {
+    const listed = this.listed.get(`${vaultId}/${itemId}`);
+    if (listed) return { username: listed.username, urls: [...listed.urls] };
     const username = await this.field(vaultId, itemId, "username") || await this.field(vaultId, itemId, "email");
     const urls = await this.field(vaultId, itemId, "urls");
     return { username, urls: urls ? urls.split(", ") : [] };
@@ -234,6 +250,7 @@ class CliProtonPassClient implements ProtonPassClient {
     try { await this.run(["logout", "--force"]); }
     finally {
       this.closed = true;
+      this.listed.clear();
       this.ready = false;
       rmSync(this.sessionDir, { recursive: true, force: true });
     }
